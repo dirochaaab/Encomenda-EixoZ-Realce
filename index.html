@@ -1595,20 +1595,21 @@ _auth.onAuthStateChanged(function(user){
     if (!name) { alert('Digite o nome da loja'); return; }
     customStore = { name: name, logo: customStoreLogo || '' };
     localStorage.setItem('customStore', JSON.stringify(customStore));
-    document.getElementById('custom-store-form').style.display = 'none';
+    var formEl = document.getElementById('custom-store-form');
+    if (formEl) formEl.style.display = 'none';
     renderCustomStoreCard();
     showToast('Loja salva!');
   }
 
   function renderCustomStoreCard() {
     var el = document.getElementById('custom-store-preview');
-    if (!el) return;
-    if (customStore && customStore.name) {
+    if (el && customStore && customStore.name) {
       var logoHtml = customStore.logo
         ? '<img src="'+customStore.logo+'" class="custom-store-logo">'
         : '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.1);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
       el.innerHTML = logoHtml + '<div style="font-size:14px;font-weight:600;">'+customStore.name+'</div><div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;">Toque para editar</div>';
-      document.getElementById('custom-store-display').className = 'custom-store-card has-store' + (selectedStore === customStore.name ? ' selected-store' : '');
+      var displayEl = document.getElementById('custom-store-display');
+      if (displayEl) displayEl.className = 'custom-store-card has-store' + (selectedStore === customStore.name ? ' selected-store' : '');
     }
   }
 
