@@ -1265,7 +1265,15 @@ _auth.onAuthStateChanged(function(user){
     </div>
 
     <!-- Loja Personalizada -->
-
+    <div id="custom-store-section" style="display:none;margin-top:12px;">
+      <div class="store-card" id="custom-store-display" onclick="selectStore(customStore ? customStore.name : '')">
+        <div class="store-check">&#10003;</div>
+        <div class="store-logo-area">
+          <div id="custom-store-preview" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;"></div>
+        </div>
+        <div class="store-name" id="custom-store-name-label">MINHA LOJA</div>
+      </div>
+    </div>
 
     <!-- Cores -->
     <div class="form-section">
@@ -1476,6 +1484,7 @@ _auth.onAuthStateChanged(function(user){
     selectedStore = '';
     document.getElementById('card-eixoz').classList.remove('selected');
     document.getElementById('card-realce').classList.remove('selected');
+    updateCustomStoreCardInForm();
   }
 
   function changeQty(delta) {
@@ -1586,6 +1595,8 @@ _auth.onAuthStateChanged(function(user){
   }
 
   function saveCustomStoreAndReturn() {
+    var name = document.getElementById('cs-name').value.trim();
+    if (!name) { alert('Digite o nome da loja'); return; }
     saveCustomStore();
     goHome();
   }
@@ -1602,14 +1613,42 @@ _auth.onAuthStateChanged(function(user){
   }
 
   function renderCustomStoreCard() {
+    // Atualizar preview na tela nova-loja
     var el = document.getElementById('custom-store-preview');
     if (el && customStore && customStore.name) {
       var logoHtml = customStore.logo
         ? '<img src="'+customStore.logo+'" class="custom-store-logo">'
         : '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.1);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
       el.innerHTML = logoHtml + '<div style="font-size:14px;font-weight:600;">'+customStore.name+'</div><div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;">Toque para editar</div>';
+    }
+    // Mostrar/atualizar o card da loja no form de nova encomenda
+    updateCustomStoreCardInForm();
+  }
+
+  function updateCustomStoreCardInForm() {
+    var section = document.getElementById('custom-store-section');
+    if (!section) return;
+    if (customStore && customStore.name) {
+      section.style.display = 'block';
+      // Atualizar logo
+      var preview = document.getElementById('custom-store-preview');
+      if (preview) {
+        var logoHtml = customStore.logo
+          ? '<img src="'+customStore.logo+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin:0 auto 6px;display:block;">'
+          : '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.1);margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
+        preview.innerHTML = logoHtml;
+      }
+      // Atualizar nome
+      var nameLabel = document.getElementById('custom-store-name-label');
+      if (nameLabel) nameLabel.textContent = customStore.name.toUpperCase();
+      // Atualizar seleção visual
       var displayEl = document.getElementById('custom-store-display');
-      if (displayEl) displayEl.className = 'custom-store-card has-store' + (selectedStore === customStore.name ? ' selected-store' : '');
+      if (displayEl) {
+        var isSelected = selectedStore === customStore.name;
+        displayEl.classList.toggle('selected', isSelected);
+      }
+    } else {
+      section.style.display = 'none';
     }
   }
 
@@ -1732,19 +1771,30 @@ _auth.onAuthStateChanged(function(user){
     document.getElementById('rel-total').textContent = fmtCur(total);
     document.getElementById('rel-ticket').textContent = fmtCur(ticket);
 
-    // Chart
+    // Chart - inclui loja customizada se existir
     var eixozT = list.filter(function(o){return o.store==='EixoZ';}).reduce(function(s,o){return s+parseVal(o.value)*(o.qty||1);},0);
     var realceT = list.filter(function(o){return o.store==='Realce';}).reduce(function(s,o){return s+parseVal(o.value)*(o.qty||1);},0);
+    var chartLabels = ['EixoZ','Realce Pers.'];
+    var chartData = [eixozT, realceT];
+    var chartBg = ['rgba(0,200,255,0.7)','rgba(232,0,125,0.7)'];
+    var chartBorder = ['#00c8ff','#e8007d'];
+    if (customStore && customStore.name) {
+      var customT = list.filter(function(o){return o.store===customStore.name;}).reduce(function(s,o){return s+parseVal(o.value)*(o.qty||1);},0);
+      chartLabels.push(customStore.name);
+      chartData.push(customT);
+      chartBg.push('rgba(123,45,255,0.7)');
+      chartBorder.push('#7b2dff');
+    }
     var ctx = document.getElementById('rel-chart').getContext('2d');
     if (relChartInst) relChartInst.destroy();
     if (typeof Chart !== 'undefined') {
       relChartInst = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: ['EixoZ','Realce Pers.'],
-          datasets: [{ label: 'Faturamento', data: [eixozT, realceT],
-            backgroundColor: ['rgba(0,200,255,0.7)','rgba(232,0,125,0.7)'],
-            borderColor: ['#00c8ff','#e8007d'], borderWidth:2, borderRadius:8 }]
+          labels: chartLabels,
+          datasets: [{ label: 'Faturamento', data: chartData,
+            backgroundColor: chartBg,
+            borderColor: chartBorder, borderWidth:2, borderRadius:8 }]
         },
         options: {
           responsive:true, maintainAspectRatio:false,
@@ -1765,7 +1815,7 @@ _auth.onAuthStateChanged(function(user){
     }
     var rows = list.sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}).map(function(o) {
       var val = fmtCur(parseVal(o.value)*(o.qty||1));
-      var cls = o.store==='EixoZ' ? 'color:#00c8ff' : 'color:#ff69b4';
+      var cls = o.store==='EixoZ' ? 'color:#00c8ff' : (o.store==='Realce' ? 'color:#ff69b4' : 'color:#7b2dff');
       return '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">' +
         '<td style="padding:8px;font-size:12px;">' + formatDate(o.date) + '</td>' +
         '<td style="padding:8px;font-size:12px;">' + o.name + '</td>' +
