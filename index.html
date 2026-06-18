@@ -1473,7 +1473,8 @@ _auth.onAuthStateChanged(function(user){
     if (!container) return;
     if (!customStores || customStores.length === 0) { container.innerHTML = ''; return; }
     container.innerHTML = customStores.map(function(store){
-      return '<div class="filter-chip" onclick="filterOrders('+JSON.stringify(store.name)+', this)">'+store.name+'</div>';
+      var safeName = store.name.replace(/'/g, "\\'");
+      return '<div class="filter-chip" onclick="filterOrders(\''+safeName+'\', this)">'+store.name+'</div>';
     }).join('');
   }
 
@@ -1692,7 +1693,8 @@ _auth.onAuthStateChanged(function(user){
         ? '<img src="'+store.logo+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin:0 auto 6px;display:block;">'
         : '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.1);margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
       var isSelected = (selectedStore === store.name);
-      return '<div class="store-card'+(isSelected ? ' selected' : '')+'" id="custom-store-card-'+i+'" style="width:calc(50% - 5px);box-sizing:border-box;" onclick="selectStore('+JSON.stringify(store.name)+')">'+
+      var safeName = store.name.replace(/'/g, "\\'");
+      return '<div class="store-card'+(isSelected ? ' selected' : '')+'" id="custom-store-card-'+i+'" style="width:calc(50% - 5px);box-sizing:border-box;" onclick="selectStore(\''+safeName+'\')">'+
         '<div class="store-check">&#10003;</div>'+
         '<div class="store-logo-area">'+logoHtml+'</div>'+
         '<div class="store-name">'+store.name.toUpperCase()+'</div>'+
