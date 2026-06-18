@@ -1264,15 +1264,9 @@ _auth.onAuthStateChanged(function(user){
       </div>
     </div>
 
-    <!-- Loja Personalizada -->
+    <!-- Lojas Personalizadas -->
     <div id="custom-store-section" style="display:none;margin-top:12px;">
-      <div class="store-card" id="custom-store-display" onclick="selectStore(customStore ? customStore.name : '')">
-        <div class="store-check">&#10003;</div>
-        <div class="store-logo-area">
-          <div id="custom-store-preview" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;"></div>
-        </div>
-        <div class="store-name" id="custom-store-name-label">MINHA LOJA</div>
-      </div>
+      <div id="custom-stores-cards-container" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
     </div>
 
     <!-- Cores -->
@@ -1317,6 +1311,11 @@ _auth.onAuthStateChanged(function(user){
       <input id="cs-name" type="text" placeholder="Ex: Minha Loja" style="width:100%;box-sizing:border-box;padding:14px 16px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:15px;outline:none;">
     </div>
     <button onclick="saveCustomStoreAndReturn()" style="width:100%;padding:16px;border-radius:50px;border:none;background:linear-gradient(135deg,#00c8ff,#7b2dff,#e8007d);color:#fff;font-family:Bebas Neue,sans-serif;font-size:18px;letter-spacing:3px;cursor:pointer;box-shadow:0 8px 24px rgba(232,0,125,0.4);">SALVAR LOJA</button>
+
+    <div style="margin-top:32px;">
+      <div style="font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:2px;margin-bottom:10px;font-family:Bebas Neue,sans-serif;">SUAS LOJAS</div>
+      <div id="saved-stores-list"></div>
+    </div>
   </div>
 </div>
 
@@ -1331,6 +1330,7 @@ _auth.onAuthStateChanged(function(user){
     <div class="filter-chip active" onclick="filterOrders('all', this)">Todas</div>
     <div class="filter-chip" onclick="filterOrders('EixoZ', this)">EixoZ</div>
     <div class="filter-chip" onclick="filterOrders('Realce', this)">Realce</div>
+    <span id="custom-filter-chips"></span>
   </div>
 
   <div class="scroll-area">
@@ -1464,7 +1464,17 @@ _auth.onAuthStateChanged(function(user){
 
   function showList() {
     renderList(filterActive);
+    renderCustomFilterChips();
     showScreen('list');
+  }
+
+  function renderCustomFilterChips() {
+    var container = document.getElementById('custom-filter-chips');
+    if (!container) return;
+    if (!customStores || customStores.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = customStores.map(function(store){
+      return '<div class="filter-chip" onclick="filterOrders('+JSON.stringify(store.name)+', this)">'+store.name+'</div>';
+    }).join('');
   }
 
   // ── FORM LOGIC ──
@@ -1494,17 +1504,9 @@ _auth.onAuthStateChanged(function(user){
 
   function selectStore(store) {
     selectedStore = store;
-    // Update custom store card selection
-    var csCard = document.getElementById('custom-store-display');
-    if (csCard) {
-      if (customStore && store === customStore.name) {
-        csCard.className = 'custom-store-card has-store selected-store';
-      } else if (customStore) {
-        csCard.className = 'custom-store-card has-store';
-      }
-    }
     document.getElementById('card-eixoz').classList.toggle('selected', store === 'EixoZ');
     document.getElementById('card-realce').classList.toggle('selected', store === 'Realce');
+    updateAllCustomStoreCardsInForm();
   }
 
   function formatCurrency(el) {
@@ -1561,18 +1563,34 @@ _auth.onAuthStateChanged(function(user){
 
 
   // ── CUSTOM STORE ──
-  var customStore = JSON.parse(localStorage.getItem('customStore') || 'null');
+  var customStores = JSON.parse(localStorage.getItem('customStores') || '[]');
+  // Migrar dados antigos (customStore → customStores)
+  (function(){
+    var old = JSON.parse(localStorage.getItem('customStore') || 'null');
+    if (old && old.name) {
+      var alreadyMigrated = customStores.some(function(s){ return s.name === old.name; });
+      if (!alreadyMigrated) { customStores.push(old); localStorage.setItem('customStores', JSON.stringify(customStores)); }
+      localStorage.removeItem('customStore');
+    }
+  })();
   var customStoreLogo = null;
+  var editingStoreIndex = null; // índice da loja sendo editada (-1 = nova loja)
 
-  function showCustomStoreScreen() {
-    showScreen('nova-loja-screen');
-    if (customStore) {
-      document.getElementById('cs-name').value = customStore.name || '';
-      if (customStore.logo) {
-        document.getElementById('cs-logo-preview').innerHTML = '<img src="'+customStore.logo+'" style="width:72px;height:72px;border-radius:50%;object-fit:cover;">';
-        customStoreLogo = customStore.logo;
+  function showCustomStoreScreen(index) {
+    editingStoreIndex = (typeof index === 'number') ? index : -1;
+    customStoreLogo = null;
+    document.getElementById('cs-name').value = '';
+    document.getElementById('cs-logo-preview').innerHTML = '&#127978;';
+    if (editingStoreIndex >= 0 && customStores[editingStoreIndex]) {
+      var store = customStores[editingStoreIndex];
+      document.getElementById('cs-name').value = store.name || '';
+      if (store.logo) {
+        document.getElementById('cs-logo-preview').innerHTML = '<img src="'+store.logo+'" style="width:72px;height:72px;border-radius:50%;object-fit:cover;">';
+        customStoreLogo = store.logo;
       }
     }
+    showScreen('nova-loja-screen');
+    renderSavedStoresList();
   }
 
   function toggleCustomStoreForm() {
@@ -1598,58 +1616,88 @@ _auth.onAuthStateChanged(function(user){
     var name = document.getElementById('cs-name').value.trim();
     if (!name) { alert('Digite o nome da loja'); return; }
     saveCustomStore();
+    editingStoreIndex = null;
+    customStoreLogo = null;
+    document.getElementById('cs-name').value = '';
+    document.getElementById('cs-logo-preview').innerHTML = '&#127978;';
+    renderSavedStoresList();
     goHome();
   }
 
   function saveCustomStore() {
     var name = document.getElementById('cs-name').value.trim();
     if (!name) { alert('Digite o nome da loja'); return; }
-    customStore = { name: name, logo: customStoreLogo || '' };
-    localStorage.setItem('customStore', JSON.stringify(customStore));
-    var formEl = document.getElementById('custom-store-form');
-    if (formEl) formEl.style.display = 'none';
-    renderCustomStoreCard();
+    var store = { name: name, logo: customStoreLogo || '' };
+    if (editingStoreIndex !== null && editingStoreIndex >= 0) {
+      customStores[editingStoreIndex] = store;
+    } else {
+      var exists = customStores.some(function(s){ return s.name.toLowerCase() === name.toLowerCase(); });
+      if (exists) { alert('Já existe uma loja com este nome!'); return; }
+      customStores.push(store);
+    }
+    localStorage.setItem('customStores', JSON.stringify(customStores));
+    renderAllCustomStoreCards();
     showToast('Loja salva!');
   }
 
-  function renderCustomStoreCard() {
-    // Atualizar preview na tela nova-loja
-    var el = document.getElementById('custom-store-preview');
-    if (el && customStore && customStore.name) {
-      var logoHtml = customStore.logo
-        ? '<img src="'+customStore.logo+'" class="custom-store-logo">'
-        : '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.1);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
-      el.innerHTML = logoHtml + '<div style="font-size:14px;font-weight:600;">'+customStore.name+'</div><div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:4px;">Toque para editar</div>';
-    }
-    // Mostrar/atualizar o card da loja no form de nova encomenda
-    updateCustomStoreCardInForm();
+  function renderAllCustomStoreCards() {
+    renderSavedStoresList();
+    updateAllCustomStoreCardsInForm();
   }
 
-  function updateCustomStoreCardInForm() {
+  function renderCustomStoreCard() { renderAllCustomStoreCards(); }
+
+  function renderSavedStoresList() {
+    var container = document.getElementById('saved-stores-list');
+    if (!container) return;
+    if (!customStores || customStores.length === 0) {
+      container.innerHTML = '<p style="color:rgba(255,255,255,0.4);font-size:13px;text-align:center;margin-top:12px;">Nenhuma loja criada ainda.</p>';
+      return;
+    }
+    container.innerHTML = customStores.map(function(store, i) {
+      var logoHtml = store.logo
+        ? '<img src="'+store.logo+'" style="width:44px;height:44px;border-radius:50%;object-fit:cover;margin-right:12px;">'
+        : '<div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.1);margin-right:12px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
+      return '<div style="display:flex;align-items:center;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;margin-bottom:8px;">'
+        + logoHtml
+        + '<span style="flex:1;font-size:14px;font-weight:600;">'+store.name+'</span>'
+        + '<button onclick="showCustomStoreScreen('+i+')" style="background:rgba(0,200,255,0.15);border:1px solid rgba(0,200,255,0.3);border-radius:8px;color:#00c8ff;padding:6px 12px;font-size:12px;cursor:pointer;margin-right:6px;">Editar</button>'
+        + '<button onclick="deleteCustomStore('+i+')" style="background:rgba(232,0,125,0.15);border:1px solid rgba(232,0,125,0.3);border-radius:8px;color:#e8007d;padding:6px 12px;font-size:12px;cursor:pointer;">Excluir</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  function deleteCustomStore(index) {
+    if (!confirm('Excluir esta loja?')) return;
+    customStores.splice(index, 1);
+    localStorage.setItem('customStores', JSON.stringify(customStores));
+    renderAllCustomStoreCards();
+    showToast('Loja excluída!');
+  }
+
+  function updateCustomStoreCardInForm() { updateAllCustomStoreCardsInForm(); }
+
+  function updateAllCustomStoreCardsInForm() {
     var section = document.getElementById('custom-store-section');
     if (!section) return;
-    if (customStore && customStore.name) {
-      section.style.display = 'block';
-      // Atualizar logo
-      var preview = document.getElementById('custom-store-preview');
-      if (preview) {
-        var logoHtml = customStore.logo
-          ? '<img src="'+customStore.logo+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin:0 auto 6px;display:block;">'
-          : '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.1);margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
-        preview.innerHTML = logoHtml;
-      }
-      // Atualizar nome
-      var nameLabel = document.getElementById('custom-store-name-label');
-      if (nameLabel) nameLabel.textContent = customStore.name.toUpperCase();
-      // Atualizar seleção visual
-      var displayEl = document.getElementById('custom-store-display');
-      if (displayEl) {
-        var isSelected = selectedStore === customStore.name;
-        displayEl.classList.toggle('selected', isSelected);
-      }
-    } else {
+    if (!customStores || customStores.length === 0) {
       section.style.display = 'none';
+      return;
     }
+    section.style.display = 'block';
+    var container = document.getElementById('custom-stores-cards-container');
+    if (!container) return;
+    container.innerHTML = customStores.map(function(store, i) {
+      var logoHtml = store.logo
+        ? '<img src="'+store.logo+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin:0 auto 6px;display:block;">'
+        : '<div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.1);margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:20px;">&#127981;</div>';
+      var isSelected = (selectedStore === store.name);
+      return '<div class="store-card'+(isSelected ? ' selected' : '')+'" id="custom-store-card-'+i+'" style="width:calc(50% - 5px);box-sizing:border-box;" onclick="selectStore('+JSON.stringify(store.name)+')">'+
+        '<div class="store-check">&#10003;</div>'+
+        '<div class="store-logo-area">'+logoHtml+'</div>'+
+        '<div class="store-name">'+store.name.toUpperCase()+'</div>'+
+        '</div>';
+    }).join('');
   }
 
   // Override selectStore to support custom store
@@ -1706,6 +1754,14 @@ _auth.onAuthStateChanged(function(user){
     if (!value) { showToast('⚠️ Informe o valor'); return; }
     if (!selectedStore) { showToast('⚠️ Selecione uma loja'); return; }
 
+    var orderStoreLogo = '';
+    if (selectedStore === 'EixoZ') orderStoreLogo = storeLogos['eixoz'] || '';
+    else if (selectedStore === 'Realce') orderStoreLogo = storeLogos['realce'] || '';
+    else {
+      var matchedStore = customStores.find(function(s){ return s.name === selectedStore; });
+      if (matchedStore) orderStoreLogo = matchedStore.logo || '';
+    }
+
     const order = {
       date,
       name,
@@ -1716,7 +1772,7 @@ _auth.onAuthStateChanged(function(user){
       store: selectedStore,
       photos: [...formPhotos],
       cores: [...formCores],
-      storeLogo: storeLogos[selectedStore === 'EixoZ' ? 'eixoz' : 'realce'] || ''
+      storeLogo: orderStoreLogo
     };
 
     fbSaveOrder(order); saveOrders();
@@ -1778,12 +1834,16 @@ _auth.onAuthStateChanged(function(user){
     var chartData = [eixozT, realceT];
     var chartBg = ['rgba(0,200,255,0.7)','rgba(232,0,125,0.7)'];
     var chartBorder = ['#00c8ff','#e8007d'];
-    if (customStore && customStore.name) {
-      var customT = list.filter(function(o){return o.store===customStore.name;}).reduce(function(s,o){return s+parseVal(o.value)*(o.qty||1);},0);
-      chartLabels.push(customStore.name);
-      chartData.push(customT);
-      chartBg.push('rgba(123,45,255,0.7)');
-      chartBorder.push('#7b2dff');
+    if (customStores && customStores.length > 0) {
+      var customColors = ['rgba(123,45,255,0.7)','rgba(255,193,7,0.7)','rgba(76,175,80,0.7)','rgba(255,87,34,0.7)','rgba(33,150,243,0.7)'];
+      var customBorders = ['#7b2dff','#ffc107','#4caf50','#ff5722','#2196f3'];
+      customStores.forEach(function(store, idx){
+        var customT = list.filter(function(o){return o.store===store.name;}).reduce(function(s,o){return s+parseVal(o.value)*(o.qty||1);},0);
+        chartLabels.push(store.name);
+        chartData.push(customT);
+        chartBg.push(customColors[idx % customColors.length]);
+        chartBorder.push(customBorders[idx % customBorders.length]);
+      });
     }
     var ctx = document.getElementById('rel-chart').getContext('2d');
     if (relChartInst) relChartInst.destroy();
